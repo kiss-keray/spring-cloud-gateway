@@ -23,9 +23,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -34,7 +33,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.cloud.gateway.webflux.ProductionConfigurationTests.TestApplication;
 import org.springframework.cloud.gateway.webflux.ProductionConfigurationTests.TestApplication.Bar;
 import org.springframework.cloud.gateway.webflux.ProductionConfigurationTests.TestApplication.Foo;
@@ -48,7 +47,6 @@ import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -60,7 +58,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RunWith(SpringRunner.class)
 @SpringBootTest(properties = { "spring.cloud.gateway.proxy.auto-forward=baz" },
 		webEnvironment = WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = TestApplication.class)
@@ -76,7 +73,7 @@ public class ProductionConfigurationTests {
 	@LocalServerPort
 	private int port;
 
-	@Before
+	@BeforeEach
 	public void init() throws Exception {
 		application.setHome(new URI("http://localhost:" + port));
 	}
@@ -176,6 +173,29 @@ public class ProductionConfigurationTests {
 
 	@Test
 	@SuppressWarnings({ "Duplicates", "unchecked" })
+	public void testSensitiveHeadersOverride() throws Exception {
+		Map<String, List<String>> headers = rest
+				.exchange(
+						RequestEntity.get(rest.getRestTemplate().getUriTemplateHandler().expand("/proxy/headers"))
+								.header("foo", "bar").header("abc", "xyz").header("cookie", "monster").build(),
+						Map.class)
+				.getBody();
+		assertThat(headers).doesNotContainKey("foo").doesNotContainKey("hello").containsKeys("bar", "abc");
+
+		assertThat(headers.get("cookie")).containsOnly("monster");
+	}
+
+	@Test
+	public void testSensitiveHeadersDefault() throws Exception {
+		Map<String, List<String>> headers = rest.exchange(RequestEntity
+				.get(rest.getRestTemplate().getUriTemplateHandler().expand("/proxy/sensitive-headers-default"))
+				.header("cookie", "monster").build(), Map.class).getBody();
+
+		assertThat(headers).doesNotContainKey("cookie");
+	}
+
+	@Test
+	@SuppressWarnings({ "Duplicates", "unchecked" })
 	public void headers() throws Exception {
 		Map<String, List<String>> headers = rest
 				.exchange(RequestEntity.get(rest.getRestTemplate().getUriTemplateHandler().expand("/proxy/headers"))
@@ -215,7 +235,7 @@ public class ProductionConfigurationTests {
 		ResponseEntity<Map<String, Foo>> deleteResponse = rest.exchange("/proxy/{id}", HttpMethod.DELETE,
 				new HttpEntity<Foo>(foo), returnType, Collections.singletonMap("id", "123"));
 		assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-		assertThat(deleteResponse.getBody().get("deleted")).isEqualToComparingFieldByField(foo);
+		assertThat(deleteResponse.getBody().get("deleted")).usingRecursiveComparison().isEqualTo(foo);
 	}
 
 	@SpringBootApplication
@@ -317,8 +337,16 @@ public class ProductionConfigurationTests {
 			@GetMapping("/proxy/headers")
 			public Mono<ResponseEntity<Map<String, List<String>>>> headers(
 					ProxyExchange<Map<String, List<String>>> proxy) {
-				proxy.sensitive("foo");
-				proxy.sensitive("hello");
+				proxy.sensitive("foo", "hello");
+				proxy.header("bar", "hello");
+				proxy.header("abc", "123");
+				proxy.header("hello", "world");
+				return proxy.uri(home.toString() + "/headers").get();
+			}
+
+			@GetMapping("/proxy/sensitive-headers-default")
+			public Mono<ResponseEntity<Map<String, List<String>>>> defaultSensitiveHeaders(
+					ProxyExchange<Map<String, List<String>>> proxy) {
 				proxy.header("bar", "hello");
 				proxy.header("abc", "123");
 				proxy.header("hello", "world");

@@ -37,6 +37,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -62,22 +63,32 @@ public class SpringCloudCircuitBreakerTestConfig {
 	@Value("${test.uri}")
 	private String uri;
 
-	@RequestMapping("/circuitbreakerFallbackController")
+	@GetMapping("/circuitbreakerFallbackController")
 	public Map<String, String> fallbackcontroller(@RequestParam("a") String a) {
 		return Collections.singletonMap("from", "circuitbreakerfallbackcontroller");
 	}
 
-	@RequestMapping("/circuitbreakerFallbackController2")
+	@GetMapping("/circuitbreakerUriFallbackController/**")
+	public Map<String, String> uriFallbackcontroller(ServerWebExchange exchange, @RequestParam("a") String a) {
+		return Collections.singletonMap("uri", exchange.getRequest().getURI().toString());
+	}
+
+	@GetMapping("/circuitbreakerFallbackController2")
 	public Map<String, String> fallbackcontroller2() {
 		return Collections.singletonMap("from", "circuitbreakerfallbackcontroller2");
 	}
 
-	@RequestMapping("/circuitbreakerFallbackController3")
+	@GetMapping("/circuitbreakerFallbackController3")
 	public Map<String, String> fallbackcontroller3() {
 		return Collections.singletonMap("from", "circuitbreakerfallbackcontroller3");
 	}
 
-	@RequestMapping("/statusCodeFallbackController")
+	@GetMapping("/circuitbreakerFallbackController/seg")
+	public Map<String, String> fallbackcontrollerSeg() {
+		return Collections.singletonMap("from", "circuitbreakerfallbackcontrollerseg");
+	}
+
+	@GetMapping("/statusCodeFallbackController")
 	public Map<String, String> statusCodeFallbackController(ServerWebExchange exchange) {
 		return Collections.singletonMap("from", "statusCodeFallbackController");
 	}
@@ -98,10 +109,14 @@ public class SpringCloudCircuitBreakerTestConfig {
 	@Bean
 	public RouteLocator circuitBreakerRouteLocator(RouteLocatorBuilder builder) {
 		return builder.routes()
-				.route("circuitbreaker_fallback_forward", r -> r.host("**.circuitbreakerforward.org")
-						.filters(f -> f.circuitBreaker(config -> config.setFallbackUri("forward:/fallback"))).uri(uri))
 				.route("fallback_controller_3",
 						r -> r.path("/fallback").filters(f -> f.setPath("/circuitbreakerFallbackController3")).uri(uri))
+				.route("fallback_with_segments", r -> r.path("/fallback/{*segments}")
+						.filters(f -> f.circuitBreaker(c -> c.setName("test")
+								.setFallbackUri("forward:/circuitbreakerFallbackController/{segments}")))
+						.uri(uri))
+				.route("circuitbreaker_fallback_forward", r -> r.host("**.circuitbreakerforward.org")
+						.filters(f -> f.circuitBreaker(config -> config.setFallbackUri("forward:/fallback"))).uri(uri))
 				.route("circuitbreaker_java",
 						r -> r.host("**.circuitbreakerjava.org")
 								.filters(f -> f.prefixPath("/httpbin").circuitBreaker(

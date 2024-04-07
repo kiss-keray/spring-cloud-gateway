@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
 
-import javax.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotEmpty;
 
 import org.springframework.http.HttpCookie;
 import org.springframework.validation.annotation.Validated;
@@ -65,6 +65,11 @@ public class CookieRoutePredicateFactory extends AbstractRoutePredicateFactory<C
 					}
 				}
 				return false;
+			}
+
+			@Override
+			public Object getConfig() {
+				return config;
 			}
 
 			@Override

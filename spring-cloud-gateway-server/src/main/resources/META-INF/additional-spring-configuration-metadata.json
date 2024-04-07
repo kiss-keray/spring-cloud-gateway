@@ -25,10 +25,33 @@
       "defaultValue": "true"
     },
     {
+      "name": "spring.cloud.gateway.filter.json-to-grpc.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enables the JSON to gRPC filter.",
+      "defaultValue": "true"
+    },
+    {
       "name": "spring.cloud.gateway.filter.modify-request-body.enabled",
       "type": "java.lang.Boolean",
       "description": "Enables the modify-request-body filter.",
       "defaultValue": "true"
+    },
+    {
+      "name": "spring.cloud.gateway.filter.local-response-cache.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enables the local-response-cache filter.",
+      "defaultValue": "false"
+    },
+    {
+      "name": "spring.cloud.gateway.filter.local-response-cache.size",
+      "type": "org.springframework.util.unit.DataSize",
+      "description": "Maximum size of the cache to evict entries for this route (in KB, MB and GB)."
+    },
+    {
+      "name": "spring.cloud.gateway.filter.local-response-cache.time-to-live",
+      "type": "java.time.Duration",
+      "description": "Time to expire a cache entry (expressed in s for seconds, m for minutes, and h for hours).",
+      "defaultValue": "5m"
     },
     {
       "name": "spring.cloud.gateway.filter.dedupe-response-header.enabled",
@@ -142,6 +165,12 @@
       "name": "spring.cloud.gateway.filter.rewrite-location.enabled",
       "type": "java.lang.Boolean",
       "description": "Enables the rewrite-location filter.",
+      "defaultValue": "true"
+    },
+    {
+      "name": "spring.cloud.gateway.filter.rewrite-request-parameter.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enables the rewrite-request-parameter filter.",
       "defaultValue": "true"
     },
     {
@@ -259,6 +288,12 @@
       "defaultValue": "true"
     },
     {
+      "name": "spring.cloud.gateway.global-filter.local-response-cache.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enables the local-response-cache filter for all routes, it allows to add a specific configuration at route level using LocalResponseCache filter.",
+      "defaultValue": "true"
+    },
+    {
       "name": "spring.cloud.gateway.predicate.after.enabled",
       "type": "java.lang.Boolean",
       "description": "Enables the after predicate.",
@@ -325,6 +360,12 @@
       "defaultValue": "true"
     },
     {
+      "name": "spring.cloud.gateway.predicate.xforwarded-remote-addr.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enables the xforwarded-remote-addr predicate.",
+      "defaultValue": "true"
+    },
+    {
       "name": "spring.cloud.gateway.predicate.weight.enabled",
       "type": "java.lang.Boolean",
       "description": "Enables the weight predicate.",
@@ -359,6 +400,24 @@
       "type": "java.lang.Boolean",
       "description": "If global CORS config should be added to the URL handler.",
       "defaultValue": "false"
+    },
+    {
+      "name": "spring.cloud.gateway.handler-mapping.order",
+      "type": "java.lang.Integer",
+      "description": "The order of RoutePredicateHandlerMapping.",
+      "defaultValue": "1"
+    },
+    {
+      "name": "spring.cloud.gateway.restrictive-property-accessor.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Restricts method and property access in SpEL.",
+      "defaultValue": "true"
+    },
+    {
+      "name": "spring.cloud.gateway.observability.enabled",
+      "type": "java.lang.Boolean",
+      "description": "If Micrometer Observability support should be turned on.",
+      "defaultValue": "true"
     }
   ]
 }

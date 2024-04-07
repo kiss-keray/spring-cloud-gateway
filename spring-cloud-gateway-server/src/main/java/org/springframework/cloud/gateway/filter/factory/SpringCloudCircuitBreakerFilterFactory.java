@@ -17,6 +17,8 @@
 package org.springframework.cloud.gateway.filter.factory;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,7 +33,9 @@ import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.support.HasRouteId;
 import org.springframework.cloud.gateway.support.HttpStatusHolder;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -45,6 +49,7 @@ import static org.springframework.cloud.gateway.support.GatewayToStringStyler.fi
 import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.CIRCUITBREAKER_EXECUTION_EXCEPTION_ATTR;
 import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR;
 import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.containsEncodedParts;
+import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.handle;
 import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.reset;
 
 /**
@@ -97,7 +102,7 @@ public abstract class SpringCloudCircuitBreakerFilterFactory
 			public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
 				return cb.run(chain.filter(exchange).doOnSuccess(v -> {
 					if (statuses.contains(exchange.getResponse().getStatusCode())) {
-						HttpStatus status = exchange.getResponse().getStatusCode();
+						HttpStatusCode status = exchange.getResponse().getStatusCode();
 						throw new CircuitBreakerStatusCodeException(status);
 					}
 				}), t -> {
@@ -106,14 +111,19 @@ public abstract class SpringCloudCircuitBreakerFilterFactory
 					}
 
 					exchange.getResponse().setStatusCode(null);
-					reset(exchange);
 
 					// TODO: copied from RouteToRequestUrlFilter
 					URI uri = exchange.getRequest().getURI();
 					// TODO: assume always?
 					boolean encoded = containsEncodedParts(uri);
+
+					String expandedFallbackUri = ServerWebExchangeUtils.expand(exchange,
+							config.getFallbackUri().getPath());
+					String fullFallbackUri = String.format("%s:%s", config.getFallbackUri().getScheme(),
+							expandedFallbackUri);
 					URI requestUrl = UriComponentsBuilder.fromUri(uri).host(null).port(null)
-							.uri(config.getFallbackUri()).scheme(null).build(encoded).toUri();
+							.uri(URI.create(fullFallbackUri)).scheme(null).build(encoded).toUri();
+
 					exchange.getAttributes().put(GATEWAY_REQUEST_URL_ATTR, requestUrl);
 					addExceptionDetails(t, exchange);
 
@@ -121,14 +131,16 @@ public abstract class SpringCloudCircuitBreakerFilterFactory
 					reset(exchange);
 
 					ServerHttpRequest request = exchange.getRequest().mutate().uri(requestUrl).build();
-					return getDispatcherHandler().handle(exchange.mutate().request(request).build());
+					return handle(getDispatcherHandler(), exchange.mutate().request(request).build());
 				}).onErrorResume(t -> handleErrorWithoutFallback(t, config.isResumeWithoutError()));
 			}
 
 			@Override
 			public String toString() {
+				String fallbackUriString = config.fallbackUri != null
+						? URLDecoder.decode(config.fallbackUri.toString(), StandardCharsets.UTF_8) : null;
 				return filterToStringCreator(SpringCloudCircuitBreakerFilterFactory.this)
-						.append("name", config.getName()).append("fallback", config.fallbackUri).toString();
+						.append("name", config.getName()).append("fallback", fallbackUriString).toString();
 			}
 		};
 	}
@@ -176,7 +188,7 @@ public abstract class SpringCloudCircuitBreakerFilterFactory
 		}
 
 		public Config setFallbackUri(String fallbackUri) {
-			return setFallbackUri(URI.create(fallbackUri));
+			return setFallbackUri(UriComponentsBuilder.fromUriString(fallbackUri).build().toUri());
 		}
 
 		public String getName() {
@@ -189,7 +201,7 @@ public abstract class SpringCloudCircuitBreakerFilterFactory
 		}
 
 		public String getId() {
-			if (StringUtils.isEmpty(name) && !StringUtils.isEmpty(routeId)) {
+			if (!StringUtils.hasText(name) && StringUtils.hasText(routeId)) {
 				return routeId;
 			}
 			return name;
@@ -221,7 +233,7 @@ public abstract class SpringCloudCircuitBreakerFilterFactory
 
 	public class CircuitBreakerStatusCodeException extends HttpStatusCodeException {
 
-		public CircuitBreakerStatusCodeException(HttpStatus statusCode) {
+		public CircuitBreakerStatusCodeException(HttpStatusCode statusCode) {
 			super(statusCode);
 		}
 

@@ -26,9 +26,11 @@ import org.springframework.cloud.gateway.test.BaseWebClientTests;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ServerWebExchange;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
 /**
@@ -39,23 +41,24 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  *
  * @author echooymxq
  **/
-@SpringBootTest(properties = { "spring.cloud.gateway.routes[0].id=route_connect_timeout",
-		"spring.cloud.gateway.routes[0].uri=http://localhost:32167",
-		"spring.cloud.gateway.routes[0].predicates[0].name=Path",
-		"spring.cloud.gateway.routes[0].predicates[0].args[pattern]=/connect/delay/{timeout}",
-		"spring.cloud.gateway.routes[0].metadata[connect-timeout]=5",
-		"spring.cloud.gateway.routes[1].id=route_response_timeout",
-		"spring.cloud.gateway.routes[1].uri=lb://testservice", "spring.cloud.gateway.routes[1].predicates[0].name=Path",
-		"spring.cloud.gateway.routes[1].predicates[0].args[pattern]=/route/delay/{timeout}",
-		"spring.cloud.gateway.routes[1].filters[0]=StripPrefix=1",
-		"spring.cloud.gateway.routes[1].metadata.response-timeout=1000" }, webEnvironment = RANDOM_PORT)
+@SpringBootTest(webEnvironment = RANDOM_PORT)
 @DirtiesContext
+@ActiveProfiles("netty-routing-filter")
 class NettyRoutingFilterCompatibleTests extends BaseWebClientTests {
 
 	@Test
 	void shouldApplyConnectTimeoutPerRoute() {
 		assertThat(NettyRoutingFilter.getInteger("5")).isEqualTo(5);
 		assertThat(NettyRoutingFilter.getInteger(5)).isEqualTo(5);
+	}
+
+	@Test
+	void getLongHandlesStringAndNumber() {
+		assertThat(NettyRoutingFilter.getLong("5")).isEqualTo(5);
+		assertThat(NettyRoutingFilter.getLong(5)).isEqualTo(5);
+		assertThat(NettyRoutingFilter.getLong(50000L)).isEqualTo(50000);
+		assertThat(NettyRoutingFilter.getLong(null)).isNull();
+		assertThatThrownBy(() -> NettyRoutingFilter.getLong("notanumber")).isInstanceOf(NumberFormatException.class);
 	}
 
 	@Test

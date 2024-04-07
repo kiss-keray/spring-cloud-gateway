@@ -21,4 +21,9 @@ _site/
 *.swo
 .vscode/
 .flattened-pom.xml
-.sdkmanrc
+
+node
+node_modules
+build
+package.json
+package-lock.json

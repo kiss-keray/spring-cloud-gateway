@@ -23,7 +23,9 @@ import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -32,15 +34,16 @@ import java.util.List;
 import java.util.Set;
 import java.util.Vector;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import javax.servlet.ReadListener;
-import javax.servlet.ServletInputStream;
-import javax.servlet.ServletOutputStream;
-import javax.servlet.WriteListener;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletRequestWrapper;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpServletResponseWrapper;
+import jakarta.servlet.ReadListener;
+import jakarta.servlet.ServletInputStream;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.WriteListener;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 
 import org.springframework.core.Conventions;
 import org.springframework.core.MethodParameter;
@@ -137,7 +140,8 @@ public class ProxyExchange<T> {
 	/**
 	 * Contains headers that are considered case-sensitive by default.
 	 */
-	public static Set<String> DEFAULT_SENSITIVE = new HashSet<>(Arrays.asList("cookie", "authorization"));
+	public static Set<String> DEFAULT_SENSITIVE = Collections
+			.unmodifiableSet(new HashSet<>(Arrays.asList("cookie", "authorization")));
 
 	private URI uri;
 
@@ -215,6 +219,8 @@ public class ProxyExchange<T> {
 		if (this.sensitive == null) {
 			this.sensitive = new HashSet<>();
 		}
+
+		this.sensitive.clear();
 		for (String name : names) {
 			this.sensitive.add(name.toLowerCase());
 		}
@@ -271,7 +277,7 @@ public class ProxyExchange<T> {
 	}
 
 	public ResponseEntity<T> get() {
-		RequestEntity<?> requestEntity = headers((BodyBuilder) RequestEntity.get(uri)).build();
+		RequestEntity<?> requestEntity = headers((BodyBuilder) RequestEntity.get(uri)).body(body());
 		return exchange(requestEntity);
 	}
 
@@ -338,22 +344,34 @@ public class ProxyExchange<T> {
 		if (type instanceof TypeVariable || type instanceof WildcardType) {
 			type = Object.class;
 		}
-		return rest.exchange(requestEntity, ParameterizedTypeReference.forType(responseType));
+		return rest.exchange(requestEntity, ParameterizedTypeReference.forType(type));
+	}
+
+	private void addHeaders(HttpHeaders headers) {
+		ArrayList<String> headerNames = new ArrayList<>();
+		webRequest.getHeaderNames().forEachRemaining(headerNames::add);
+		Set<String> filteredKeys = filterHeaderKeys(headerNames);
+		filteredKeys.stream().filter(key -> !headers.containsKey(key))
+				.forEach(header -> headers.addAll(header, Arrays.asList(webRequest.getHeaderValues(header))));
 	}
 
 	private BodyBuilder headers(BodyBuilder builder) {
-		Set<String> sensitive = this.sensitive;
-		if (sensitive == null) {
-			sensitive = DEFAULT_SENSITIVE;
-		}
 		proxy();
-		for (String name : headers.keySet()) {
-			if (sensitive.contains(name.toLowerCase())) {
-				continue;
-			}
+		for (String name : filterHeaderKeys(headers)) {
 			builder.header(name, headers.get(name).toArray(new String[0]));
 		}
+		builder.headers(this::addHeaders);
 		return builder;
+	}
+
+	private Set<String> filterHeaderKeys(HttpHeaders headers) {
+		return filterHeaderKeys(headers.keySet());
+	}
+
+	private Set<String> filterHeaderKeys(Collection<String> headerNames) {
+		final Set<String> sensitiveHeaders = this.sensitive != null ? this.sensitive : DEFAULT_SENSITIVE;
+		return headerNames.stream().filter(header -> !sensitiveHeaders.contains(header.toLowerCase()))
+				.collect(Collectors.toSet());
 	}
 
 	private void proxy() {
@@ -397,7 +415,7 @@ public class ProxyExchange<T> {
 	}
 
 	private String forwarded(URI uri, String hostHeader) {
-		if (!StringUtils.isEmpty(hostHeader)) {
+		if (StringUtils.hasText(hostHeader)) {
 			return "host=" + hostHeader;
 		}
 		if ("http".equals(uri.getScheme())) {
@@ -552,7 +570,7 @@ class ServletOutputToInputConverter extends HttpServletResponseWrapper {
 
 			@Override
 			public void write(int b) throws IOException {
-				builder.append(new Character((char) b));
+				builder.append(Character.valueOf((char) b));
 			}
 
 			@Override

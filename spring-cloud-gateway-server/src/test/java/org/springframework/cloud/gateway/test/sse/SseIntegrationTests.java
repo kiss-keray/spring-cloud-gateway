@@ -20,9 +20,9 @@ import java.time.Duration;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
@@ -44,7 +44,7 @@ import org.springframework.core.ResolvableType;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.http.server.reactive.HttpHandler;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.DispatcherHandler;
 import org.springframework.web.reactive.config.EnableWebFlux;
@@ -82,7 +82,7 @@ public class SseIntegrationTests {
 		return Flux.interval(period).take(count).onBackpressureBuffer(2);
 	}
 
-	@Before
+	@BeforeEach
 	public void setup() throws Exception {
 		this.server = new ReactorHttpServer();
 		this.server.setHandler(createHttpHandler());
@@ -104,7 +104,7 @@ public class SseIntegrationTests {
 		logger.info("Gateway Port: " + this.gatewayPort);
 	}
 
-	@After
+	@AfterEach
 	public void tearDown() throws Exception {
 		this.server.stop();
 		this.serverPort = 0;
@@ -189,17 +189,17 @@ public class SseIntegrationTests {
 
 		private static final Flux<Long> INTERVAL = interval(Duration.ofMillis(100), 50);
 
-		@RequestMapping("/sse/string")
+		@GetMapping("/sse/string")
 		Flux<String> string() {
 			return INTERVAL.map(l -> "foo " + l);
 		}
 
-		@RequestMapping("/sse/person")
+		@GetMapping("/sse/person")
 		Flux<Person> person() {
 			return INTERVAL.map(l -> new Person("foo " + l));
 		}
 
-		@RequestMapping("/sse/event")
+		@GetMapping("/sse/event")
 		Flux<ServerSentEvent<String>> sse() {
 			return INTERVAL.map(l -> ServerSentEvent.builder("foo").id(Long.toString(l)).comment("bar").build());
 		}

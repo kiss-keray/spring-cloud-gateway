@@ -16,31 +16,16 @@
 
 package org.springframework.cloud.gateway.config;
 
-import java.io.IOException;
-import java.net.URL;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchProviderException;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
-import javax.net.ssl.KeyManagerFactory;
-import javax.validation.constraints.Max;
-
+import jakarta.validation.constraints.Max;
 import reactor.netty.resources.ConnectionProvider;
-import reactor.netty.tcp.SslProvider;
 import reactor.netty.transport.ProxyProvider;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.web.server.WebServerException;
 import org.springframework.core.style.ToStringCreator;
-import org.springframework.util.ResourceUtils;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 
@@ -51,7 +36,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 public class HttpClientProperties {
 
-	/** The connect timeout in millis, the default is 45s. */
+	/** The connect timeout in millis, the default is 30s. */
 	private Integer connectTimeout;
 
 	/** The response timeout. */
@@ -196,7 +181,7 @@ public class HttpClientProperties {
 		 */
 		private Integer maxConnections = ConnectionProvider.DEFAULT_POOL_MAX_CONNECTIONS;
 
-		/** Only for type FIXED, the maximum time in millis to wait for aquiring. */
+		/** Only for type FIXED, the maximum time in millis to wait for acquiring. */
 		private Long acquireTimeout = ConnectionProvider.DEFAULT_POOL_ACQUIRE_TIMEOUT;
 
 		/**
@@ -216,6 +201,12 @@ public class HttpClientProperties {
 		 * Disabled by default ({@link Duration#ZERO})
 		 */
 		private Duration evictionInterval = Duration.ZERO;
+
+		/**
+		 * Enables channel pools metrics to be collected and registered in Micrometer.
+		 * Disabled by default.
+		 */
+		private boolean metrics = false;
 
 		public PoolType getType() {
 			return type;
@@ -273,11 +264,19 @@ public class HttpClientProperties {
 			this.evictionInterval = evictionInterval;
 		}
 
+		public boolean isMetrics() {
+			return metrics;
+		}
+
+		public void setMetrics(boolean metrics) {
+			this.metrics = metrics;
+		}
+
 		@Override
 		public String toString() {
 			return "Pool{" + "type=" + type + ", name='" + name + '\'' + ", maxConnections=" + maxConnections
 					+ ", acquireTimeout=" + acquireTimeout + ", maxIdleTime=" + maxIdleTime + ", maxLifeTime="
-					+ maxLifeTime + ", evictionInterval=" + evictionInterval + '}';
+					+ maxLifeTime + ", evictionInterval=" + evictionInterval + ", metrics=" + metrics + '}';
 		}
 
 		public enum PoolType {
@@ -402,9 +401,6 @@ public class HttpClientProperties {
 		/** SSL close_notify read timeout. Default to 0 ms. */
 		private Duration closeNotifyReadTimeout = Duration.ZERO;
 
-		/** The default ssl configuration type. Defaults to TCP. */
-		private SslProvider.DefaultConfigurationType defaultConfigurationType = SslProvider.DefaultConfigurationType.TCP;
-
 		/** Keystore path for Netty HttpClient. */
 		private String keyStore;
 
@@ -468,74 +464,6 @@ public class HttpClientProperties {
 			this.trustedX509Certificates = trustedX509;
 		}
 
-		public X509Certificate[] getTrustedX509CertificatesForTrustManager() {
-			try {
-				CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-				ArrayList<Certificate> allCerts = new ArrayList<>();
-				for (String trustedCert : getTrustedX509Certificates()) {
-					try {
-						URL url = ResourceUtils.getURL(trustedCert);
-						Collection<? extends Certificate> certs = certificateFactory
-								.generateCertificates(url.openStream());
-						allCerts.addAll(certs);
-					}
-					catch (IOException e) {
-						throw new WebServerException("Could not load certificate '" + trustedCert + "'", e);
-					}
-				}
-				return allCerts.toArray(new X509Certificate[allCerts.size()]);
-			}
-			catch (CertificateException e1) {
-				throw new WebServerException("Could not load CertificateFactory X.509", e1);
-			}
-		}
-
-		public KeyManagerFactory getKeyManagerFactory() {
-			try {
-				if (getKeyStore() != null && getKeyStore().length() > 0) {
-					KeyManagerFactory keyManagerFactory = KeyManagerFactory
-							.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-					char[] keyPassword = getKeyPassword() != null ? getKeyPassword().toCharArray() : null;
-
-					if (keyPassword == null && getKeyStorePassword() != null) {
-						keyPassword = getKeyStorePassword().toCharArray();
-					}
-
-					keyManagerFactory.init(this.createKeyStore(), keyPassword);
-
-					return keyManagerFactory;
-				}
-
-				return null;
-			}
-			catch (Exception e) {
-				throw new IllegalStateException(e);
-			}
-		}
-
-		public KeyStore createKeyStore() {
-			try {
-				KeyStore store = getKeyStoreProvider() != null
-						? KeyStore.getInstance(getKeyStoreType(), getKeyStoreProvider())
-						: KeyStore.getInstance(getKeyStoreType());
-				try {
-					URL url = ResourceUtils.getURL(getKeyStore());
-					store.load(url.openStream(),
-							getKeyStorePassword() != null ? getKeyStorePassword().toCharArray() : null);
-				}
-				catch (Exception e) {
-					throw new WebServerException("Could not load key store ' " + getKeyStore() + "'", e);
-				}
-
-				return store;
-			}
-			catch (KeyStoreException | NoSuchProviderException e) {
-				throw new WebServerException("Could not load KeyStore for given type and provider", e);
-			}
-		}
-
-		// TODO: support configuration of other trust manager factories
-
 		public boolean isUseInsecureTrustManager() {
 			return useInsecureTrustManager;
 		}
@@ -568,22 +496,13 @@ public class HttpClientProperties {
 			this.closeNotifyReadTimeout = closeNotifyReadTimeout;
 		}
 
-		public SslProvider.DefaultConfigurationType getDefaultConfigurationType() {
-			return defaultConfigurationType;
-		}
-
-		public void setDefaultConfigurationType(SslProvider.DefaultConfigurationType defaultConfigurationType) {
-			this.defaultConfigurationType = defaultConfigurationType;
-		}
-
 		@Override
 		public String toString() {
 			return new ToStringCreator(this).append("useInsecureTrustManager", useInsecureTrustManager)
 					.append("trustedX509Certificates", trustedX509Certificates)
 					.append("handshakeTimeout", handshakeTimeout)
 					.append("closeNotifyFlushTimeout", closeNotifyFlushTimeout)
-					.append("closeNotifyReadTimeout", closeNotifyReadTimeout)
-					.append("defaultConfigurationType", defaultConfigurationType).toString();
+					.append("closeNotifyReadTimeout", closeNotifyReadTimeout).toString();
 		}
 
 	}

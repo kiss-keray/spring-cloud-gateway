@@ -21,7 +21,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 import org.springframework.web.server.ServerWebExchange;
 
@@ -51,6 +51,11 @@ public class AfterRoutePredicateFactory extends AbstractRoutePredicateFactory<Af
 			public boolean test(ServerWebExchange serverWebExchange) {
 				final ZonedDateTime now = ZonedDateTime.now();
 				return now.isAfter(config.getDatetime());
+			}
+
+			@Override
+			public Object getConfig() {
+				return config;
 			}
 
 			@Override

@@ -32,17 +32,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.server.ServerWebExchange;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.data.Offset.offset;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
-@SpringBootTest(properties = "spring.cloud.gateway.httpclient.response-timeout=3s", webEnvironment = RANDOM_PORT)
+@SpringBootTest(webEnvironment = RANDOM_PORT)
 @DirtiesContext
+@ActiveProfiles("netty-routing-filter")
 public class NettyRoutingFilterIntegrationTests extends BaseWebClientTests {
 
 	@Autowired
@@ -110,8 +113,40 @@ public class NettyRoutingFilterIntegrationTests extends BaseWebClientTests {
 	}
 
 	@Test
+	public void shouldNotApplyResponseTimeoutPerRouteWhenNegativeValue() {
+		assertThatThrownBy(() -> {
+			testClient.get().uri("/disabledRoute/delay/10").exchange();
+		}).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("Timeout on blocking read for 5000000000 NANOSECONDS");
+	}
+
+	@Test
+	public void shouldApplyResponseTimeoutForPlaceholder() {
+		testClient.get().uri("/responseheaders/200").header("Host", "www.responsetimeoutplaceholder.org").exchange()
+				.expectStatus().isEqualTo(HttpStatus.OK);
+	}
+
+	@Test
+	public void shouldApplyGlobalResponseTimeoutForInvalidRouteTimeoutValue() {
+		testClient.get().uri("/invalidRoute/delay/5").exchange().expectStatus().isEqualTo(HttpStatus.GATEWAY_TIMEOUT)
+				.expectBody().jsonPath("$.status").isEqualTo(String.valueOf(HttpStatus.GATEWAY_TIMEOUT.value()))
+				.jsonPath("$.message").isEqualTo("Response took longer than timeout: PT3S");
+	}
+
+	@Test
 	public void shouldNotApplyPerRouteTimeoutWhenItIsNotConfigured() {
 		testClient.get().uri("/delay/2").exchange().expectStatus().isEqualTo(HttpStatus.OK);
+	}
+
+	@Test
+	// gh-2541
+	public void shouldMergeResponseHeadersFromUpstreamWithCreatedByGateway() {
+		String header = "X-Test-SHOULD-MERGED-HEADER";
+		String gatewayHeaderValue = "value-from-gateway";
+		String upstreamHeaderValue = "value-from-upstream";
+		testClient.post().uri("/responseheaders/200").header("Host", "www.mergeresponseheader.org")
+				.header(header, upstreamHeaderValue).exchange().expectHeader()
+				.valueEquals(header, upstreamHeaderValue, gatewayHeaderValue);
 	}
 
 	@EnableAutoConfiguration

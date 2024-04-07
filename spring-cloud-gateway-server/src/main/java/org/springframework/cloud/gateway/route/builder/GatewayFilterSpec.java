@@ -19,6 +19,8 @@ package org.springframework.cloud.gateway.route.builder;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -37,15 +39,20 @@ import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.OrderedGatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractChangeRequestUriGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.AddRequestHeaderGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.AddRequestHeadersIfNotPresentGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.AddRequestHeadersIfNotPresentGatewayFilterFactory.KeyValue;
 import org.springframework.cloud.gateway.filter.factory.AddRequestParameterGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.AddResponseHeaderGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.CacheRequestBodyGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.DedupeResponseHeaderGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.DedupeResponseHeaderGatewayFilterFactory.Strategy;
 import org.springframework.cloud.gateway.filter.factory.FallbackHeadersGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.JsonToGrpcGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.MapRequestHeaderGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.PrefixPathGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.PreserveHostHeaderGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.RedirectToGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.RemoveJsonAttributesResponseBodyGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.RemoveRequestHeaderGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.RemoveRequestParameterGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.RemoveResponseHeaderGatewayFilterFactory;
@@ -57,6 +64,7 @@ import org.springframework.cloud.gateway.filter.factory.RetryGatewayFilterFactor
 import org.springframework.cloud.gateway.filter.factory.RewriteLocationResponseHeaderGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.RewriteLocationResponseHeaderGatewayFilterFactory.StripVersion;
 import org.springframework.cloud.gateway.filter.factory.RewritePathGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.RewriteRequestParameterGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.RewriteResponseHeaderGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.SaveSessionGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.SecureHeadersGatewayFilterFactory;
@@ -68,6 +76,7 @@ import org.springframework.cloud.gateway.filter.factory.SetStatusGatewayFilterFa
 import org.springframework.cloud.gateway.filter.factory.SpringCloudCircuitBreakerFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.StripPrefixGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.TokenRelayGatewayFilterFactory;
+import org.springframework.cloud.gateway.filter.factory.cache.LocalResponseCacheGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.rewrite.ModifyRequestBodyGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.rewrite.ModifyResponseBodyGatewayFilterFactory;
 import org.springframework.cloud.gateway.filter.factory.rewrite.RewriteFunction;
@@ -164,6 +173,20 @@ public class GatewayFilterSpec extends UriSpec {
 	}
 
 	/**
+	 * Adds a request header to the request before it is routed by the Gateway.
+	 * @param headers the header name(s) and value(s) as
+	 * 'name-1:value-1,name-2:value-2,...'
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec addRequestHeadersIfNotPresent(String... headers) {
+		return filter(getBean(AddRequestHeadersIfNotPresentGatewayFilterFactory.class).apply(c -> {
+			KeyValue[] values = Arrays.stream(headers).map(header -> header.split(":"))
+					.map(parts -> new KeyValue(parts[0], parts[1])).toArray(size -> new KeyValue[size]);
+			c.setKeyValues(values);
+		}));
+	}
+
+	/**
 	 * Adds a request parameter to the request before it is routed by the Gateway.
 	 * @param param the parameter name
 	 * @param value the parameter vaule
@@ -183,6 +206,22 @@ public class GatewayFilterSpec extends UriSpec {
 	public GatewayFilterSpec addResponseHeader(String headerName, String headerValue) {
 		return filter(getBean(AddResponseHeaderGatewayFilterFactory.class)
 				.apply(c -> c.setName(headerName).setValue(headerValue)));
+	}
+
+	/**
+	 * A filter that adds a local cache for storing response body for repeated requests.
+	 * <p>
+	 * If `timeToLive` and `size` are null, a global cache is used configured by the
+	 * global configuration
+	 * {@link org.springframework.cloud.gateway.filter.factory.cache.LocalResponseCacheProperties}.
+	 * @param timeToLive time an entry is kept in cache. Default: 5 minutes
+	 * @param size size expression to limit cache size (See format in {@link DataSize}.
+	 * Default: {@code null} (no limit)
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec localResponseCache(Duration timeToLive, DataSize size) {
+		return filter(getBean(LocalResponseCacheGatewayFilterFactory.class)
+				.apply(c -> c.setTimeToLive(timeToLive).setSize(size)));
 	}
 
 	/**
@@ -207,6 +246,18 @@ public class GatewayFilterSpec extends UriSpec {
 					"There needs to be a circuit breaker implementation on the classpath that supports reactive APIs.");
 		}
 		return filter(filterFactory.apply(this.routeBuilder.getId(), configConsumer));
+	}
+
+	/**
+	 * A filter that transforms a JSON request into a gRPC one.
+	 * @param protoDescriptor relative path to the proto descriptor file.
+	 * @param protoFile relative path to the proto definition file.
+	 * @param service fully qualified name of the service that will handle the request.
+	 * @param method method name in the service that will handle the request.
+	 */
+	public GatewayFilterSpec jsonToGRPC(String protoDescriptor, String protoFile, String service, String method) {
+		return filter(getBean(JsonToGrpcGatewayFilterFactory.class).apply(c -> c.setMethod(method)
+				.setProtoDescriptor(protoDescriptor).setProtoFile(protoFile).setService(service)));
 	}
 
 	/**
@@ -250,6 +301,16 @@ public class GatewayFilterSpec extends UriSpec {
 			RewriteFunction<T, R> rewriteFunction) {
 		return filter(getBean(ModifyRequestBodyGatewayFilterFactory.class)
 				.apply(c -> c.setRewriteFunction(inClass, outClass, rewriteFunction).setContentType(newContentType)));
+	}
+
+	/**
+	 * A filter that can cache the request body.
+	 * @param bodyClass the class to convert the incoming request body to the original
+	 * request body class
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec cacheRequestBody(Class<?> bodyClass) {
+		return filter(getBean(CacheRequestBodyGatewayFilterFactory.class).apply(c -> c.setBodyClass(bodyClass)));
 	}
 
 	/**
@@ -379,6 +440,18 @@ public class GatewayFilterSpec extends UriSpec {
 	 * @param status an HTTP status code, should be a {@code 300} series redirect
 	 * @param url the URL to redirect to. This URL will be set in the {@code location}
 	 * header
+	 * @param includeRequestParams if true, query params will be passed to the url
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec redirect(int status, URI url, boolean includeRequestParams) {
+		return redirect(String.valueOf(status), url.toString(), includeRequestParams);
+	}
+
+	/**
+	 * A filter that will return a redirect response back to the client.
+	 * @param status an HTTP status code, should be a {@code 300} series redirect
+	 * @param url the URL to redirect to. This URL will be set in the {@code location}
+	 * header
 	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
 	 */
 	public GatewayFilterSpec redirect(int status, String url) {
@@ -390,10 +463,34 @@ public class GatewayFilterSpec extends UriSpec {
 	 * @param status an HTTP status code, should be a {@code 300} series redirect
 	 * @param url the URL to redirect to. This URL will be set in the {@code location}
 	 * header
+	 * @param includeRequestParams if true, query params will be passed to the url
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec redirect(int status, String url, boolean includeRequestParams) {
+		return redirect(String.valueOf(status), url, includeRequestParams);
+	}
+
+	/**
+	 * A filter that will return a redirect response back to the client.
+	 * @param status an HTTP status code, should be a {@code 300} series redirect
+	 * @param url the URL to redirect to. This URL will be set in the {@code location}
+	 * header
 	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
 	 */
 	public GatewayFilterSpec redirect(String status, URI url) {
-		return redirect(status, url);
+		return redirect(status, url.toString(), false);
+	}
+
+	/**
+	 * A filter that will return a redirect response back to the client.
+	 * @param status an HTTP status code, should be a {@code 300} series redirect
+	 * @param url the URL to redirect to. This URL will be set in the {@code location}
+	 * header
+	 * @param includeRequestParams if true, query params will be passed to the url
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec redirect(String status, String url, boolean includeRequestParams) {
+		return filter(getBean(RedirectToGatewayFilterFactory.class).apply(status, url, includeRequestParams));
 	}
 
 	/**
@@ -415,12 +512,49 @@ public class GatewayFilterSpec extends UriSpec {
 	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
 	 */
 	public GatewayFilterSpec redirect(HttpStatus status, URL url) {
+		return redirect(status, url, false);
+	}
+
+	/**
+	 * A filter that will return a redirect response back to the client.
+	 * @param status an HTTP status code, should be a {@code 300} series redirect
+	 * @param url the URL to redirect to. This URL will be set in the {@code location}
+	 * header
+	 * @param includeRequestParams if true, query params will be passed to the url
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec redirect(HttpStatus status, URL url, boolean includeRequestParams) {
 		try {
-			return filter(getBean(RedirectToGatewayFilterFactory.class).apply(status, url.toURI()));
+			return filter(
+					getBean(RedirectToGatewayFilterFactory.class).apply(status, url.toURI(), includeRequestParams));
 		}
 		catch (URISyntaxException e) {
 			throw new IllegalArgumentException("Invalid URL", e);
 		}
+	}
+
+	/**
+	 * A filter that can be used to modify the response body. By default, this only
+	 * removes root attributes.
+	 * @param attributes list of attributes to remove.
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec removeJsonAttributes(String... attributes) {
+		return removeJsonAttributes(false, attributes);
+
+	}
+
+	/**
+	 * A filter that can be used to modify the response body.
+	 * @param attributes list of attributes to remove.
+	 * @param deleteRecursively if true, all attributes regardless of nesting will be
+	 * removed.
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec removeJsonAttributes(boolean deleteRecursively, String... attributes) {
+		return filter(getBean(RemoveJsonAttributesResponseBodyGatewayFilterFactory.class)
+				.apply(c -> c.setFieldList(Arrays.asList(attributes)).setDeleteRecursively(deleteRecursively)));
+
 	}
 
 	/**
@@ -600,6 +734,17 @@ public class GatewayFilterSpec extends UriSpec {
 		return filter(getBean(RewriteLocationResponseHeaderGatewayFilterFactory.class).apply(
 				c -> c.setStripVersion(StripVersion.valueOf(stripVersionMode)).setLocationHeaderName(locationHeaderName)
 						.setHostValue(hostValue).setProtocols(protocolsRegex)));
+	}
+
+	/**
+	 * A filter that rewrites the value of a request parameter
+	 * @param name The name of the request parameter to replace
+	 * @param replacement The new value for the request parameter
+	 * @return a {@link GatewayFilterSpec} that can be used to apply additional filters
+	 */
+	public GatewayFilterSpec rewriteRequestParameter(String name, String replacement) {
+		return filter(getBean(RewriteRequestParameterGatewayFilterFactory.class)
+				.apply(c -> c.setReplacement(replacement).setName(name)));
 	}
 
 	/**

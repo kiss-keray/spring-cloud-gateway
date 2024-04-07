@@ -35,7 +35,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.cloud.client.DefaultServiceInstance;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.RetryGatewayFilterFactory.RetryConfig;
@@ -53,6 +53,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -186,6 +188,7 @@ public class RetryGatewayFilterFactoryIntegrationTests extends BaseWebClientTest
 	}
 
 	@Test
+	@SuppressWarnings("unchecked")
 	public void toStringFormat() {
 		RetryConfig config = new RetryConfig();
 		config.setRetries(4);
@@ -221,7 +224,7 @@ public class RetryGatewayFilterFactoryIntegrationTests extends BaseWebClientTest
 					.header("X-Retry-Count", String.valueOf(retryCount)).body("slept " + millisToSleep + " ms"));
 		}
 
-		@RequestMapping("/httpbin/retryalwaysfail")
+		@GetMapping("/httpbin/retryalwaysfail")
 		public ResponseEntity<String> retryalwaysfail(@RequestParam("key") String key,
 				@RequestParam(name = "count", defaultValue = "3") int count) {
 			AtomicInteger num = getCount(key);
@@ -231,7 +234,7 @@ public class RetryGatewayFilterFactoryIntegrationTests extends BaseWebClientTest
 					.body("permanently broken");
 		}
 
-		@RequestMapping("/httpbin/retrypost")
+		@PostMapping("/httpbin/retrypost")
 		public ResponseEntity<String> retrypost(@RequestParam("key") String key,
 				@RequestParam(name = "count", defaultValue = "3") int count,
 				@RequestParam("expectedbody") String expectedbody, @RequestBody String body) {
@@ -244,7 +247,7 @@ public class RetryGatewayFilterFactoryIntegrationTests extends BaseWebClientTest
 			return response;
 		}
 
-		@RequestMapping("/httpbin/retry")
+		@GetMapping("/httpbin/retry")
 		public ResponseEntity<String> retry(@RequestParam("key") String key,
 				@RequestParam(name = "count", defaultValue = "3") int count,
 				@RequestParam(name = "failStatus", required = false) Integer failStatus) {

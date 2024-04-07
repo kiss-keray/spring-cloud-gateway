@@ -23,6 +23,7 @@ import java.util.Map;
 
 import reactor.core.publisher.Mono;
 
+import org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties;
 import org.springframework.boot.actuate.endpoint.web.annotation.RestControllerEndpoint;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -41,15 +42,15 @@ import org.springframework.web.bind.annotation.PathVariable;
 /**
  * @author Spencer Gibb
  */
-@RestControllerEndpoint(id = "gateway")
+@RestControllerEndpoint(id = "gateway", enableByDefault = false)
 public class GatewayLegacyControllerEndpoint extends AbstractGatewayControllerEndpoint {
 
 	public GatewayLegacyControllerEndpoint(RouteDefinitionLocator routeDefinitionLocator,
 			List<GlobalFilter> globalFilters, List<GatewayFilterFactory> gatewayFilterFactories,
 			List<RoutePredicateFactory> routePredicates, RouteDefinitionWriter routeDefinitionWriter,
-			RouteLocator routeLocator) {
+			RouteLocator routeLocator, WebEndpointProperties webEndpointProperties) {
 		super(routeDefinitionLocator, globalFilters, gatewayFilterFactories, routePredicates, routeDefinitionWriter,
-				routeLocator);
+				routeLocator, webEndpointProperties);
 	}
 
 	@GetMapping("/routes")

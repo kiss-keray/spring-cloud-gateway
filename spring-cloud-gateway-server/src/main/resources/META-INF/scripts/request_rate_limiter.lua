@@ -1,3 +1,5 @@
+redis.replicate_commands()
+
 local tokens_key = KEYS[1]
 local timestamp_key = KEYS[2]
 --redis.log(redis.LOG_WARNING, "tokens_key " .. tokens_key)
@@ -7,12 +9,17 @@ local capacity = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 local requested = tonumber(ARGV[4])
 
-local fill_time = capacity/rate
-local ttl = math.floor(fill_time*2)
+local fill_time = capacity / rate
+local ttl = math.floor(fill_time * 2)
+
+-- for testing, it should use redis system time in production
+if now == nil then
+  now = redis.call('TIME')[1]
+end
 
 --redis.log(redis.LOG_WARNING, "rate " .. ARGV[1])
 --redis.log(redis.LOG_WARNING, "capacity " .. ARGV[2])
---redis.log(redis.LOG_WARNING, "now " .. ARGV[3])
+--redis.log(redis.LOG_WARNING, "now " .. now)
 --redis.log(redis.LOG_WARNING, "requested " .. ARGV[4])
 --redis.log(redis.LOG_WARNING, "filltime " .. fill_time)
 --redis.log(redis.LOG_WARNING, "ttl " .. ttl)

@@ -24,6 +24,7 @@ import java.util.Map;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties;
 import org.springframework.boot.actuate.endpoint.web.annotation.RestControllerEndpoint;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -42,14 +43,15 @@ import org.springframework.web.bind.annotation.PathVariable;
 /**
  * @author Spencer Gibb
  */
-@RestControllerEndpoint(id = "gateway")
+@RestControllerEndpoint(id = "gateway", enableByDefault = false)
 public class GatewayControllerEndpoint extends AbstractGatewayControllerEndpoint {
 
 	public GatewayControllerEndpoint(List<GlobalFilter> globalFilters, List<GatewayFilterFactory> gatewayFilters,
 			List<RoutePredicateFactory> routePredicates, RouteDefinitionWriter routeDefinitionWriter,
-			RouteLocator routeLocator, RouteDefinitionLocator routeDefinitionLocator) {
+			RouteLocator routeLocator, RouteDefinitionLocator routeDefinitionLocator,
+			WebEndpointProperties webEndpointProperties) {
 		super(routeDefinitionLocator, globalFilters, gatewayFilters, routePredicates, routeDefinitionWriter,
-				routeLocator);
+				routeLocator, webEndpointProperties);
 	}
 
 	@GetMapping("/routedefinitions")

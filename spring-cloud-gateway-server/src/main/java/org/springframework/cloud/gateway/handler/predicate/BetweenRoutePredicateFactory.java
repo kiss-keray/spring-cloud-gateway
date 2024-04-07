@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 import org.springframework.util.Assert;
 import org.springframework.validation.annotation.Validated;
@@ -61,6 +61,11 @@ public class BetweenRoutePredicateFactory extends AbstractRoutePredicateFactory<
 			public boolean test(ServerWebExchange serverWebExchange) {
 				final ZonedDateTime now = ZonedDateTime.now();
 				return now.isAfter(config.getDatetime1()) && now.isBefore(config.getDatetime2());
+			}
+
+			@Override
+			public Object getConfig() {
+				return config;
 			}
 
 			@Override

@@ -71,12 +71,12 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.s
  */
 public class NettyRoutingFilter implements GlobalFilter, Ordered {
 
-	private static final Log log = LogFactory.getLog(NettyRoutingFilter.class);
-
 	/**
 	 * The order of the NettyRoutingFilter. See {@link Ordered#LOWEST_PRECEDENCE}.
 	 */
 	public static final int ORDER = Ordered.LOWEST_PRECEDENCE;
+
+	private static final Log log = LogFactory.getLog(NettyRoutingFilter.class);
 
 	private final HttpClient httpClient;
 
@@ -119,7 +119,7 @@ public class NettyRoutingFilter implements GlobalFilter, Ordered {
 
 		ServerHttpRequest request = exchange.getRequest();
 
-		final HttpMethod method = HttpMethod.valueOf(request.getMethodValue());
+		final HttpMethod method = HttpMethod.valueOf(request.getMethod().name());
 		final String url = requestUrl.toASCIIString();
 
 		HttpHeaders filtered = filterRequest(getHeadersFilters(), exchange);
@@ -181,7 +181,7 @@ public class NettyRoutingFilter implements GlobalFilter, Ordered {
 
 			exchange.getAttributes().put(CLIENT_RESPONSE_HEADER_NAMES, filteredResponseHeaders.keySet());
 
-			response.getHeaders().putAll(filteredResponseHeaders);
+			response.getHeaders().addAll(filteredResponseHeaders);
 
 			return Mono.just(res);
 		});
@@ -237,7 +237,7 @@ public class NettyRoutingFilter implements GlobalFilter, Ordered {
 	 * timeout configuration.
 	 * @param route the current route.
 	 * @param exchange the current ServerWebExchange.
-	 * @return
+	 * @return the configured HttpClient.
 	 */
 	protected HttpClient getHttpClient(Route route, ServerWebExchange exchange) {
 		Object connectTimeoutAttr = route.getMetadata().get(CONNECT_TIMEOUT_ATTR);
@@ -260,17 +260,32 @@ public class NettyRoutingFilter implements GlobalFilter, Ordered {
 	}
 
 	private Duration getResponseTimeout(Route route) {
-		Object responseTimeoutAttr = route.getMetadata().get(RESPONSE_TIMEOUT_ATTR);
-		Long responseTimeout = null;
-		if (responseTimeoutAttr != null) {
-			if (responseTimeoutAttr instanceof Number) {
-				responseTimeout = ((Number) responseTimeoutAttr).longValue();
-			}
-			else {
-				responseTimeout = Long.valueOf(responseTimeoutAttr.toString());
+		try {
+			if (route.getMetadata().containsKey(RESPONSE_TIMEOUT_ATTR)) {
+				Long routeResponseTimeout = getLong(route.getMetadata().get(RESPONSE_TIMEOUT_ATTR));
+				if (routeResponseTimeout != null && routeResponseTimeout >= 0) {
+					return Duration.ofMillis(routeResponseTimeout);
+				}
+				else {
+					return null;
+				}
 			}
 		}
-		return responseTimeout != null ? Duration.ofMillis(responseTimeout) : properties.getResponseTimeout();
+		catch (NumberFormatException e) {
+			// ignore number format and use global default
+		}
+		return properties.getResponseTimeout();
+	}
+
+	static Long getLong(Object responseTimeoutAttr) {
+		Long responseTimeout = null;
+		if (responseTimeoutAttr instanceof Number) {
+			responseTimeout = ((Number) responseTimeoutAttr).longValue();
+		}
+		else if (responseTimeoutAttr != null) {
+			responseTimeout = Long.parseLong(responseTimeoutAttr.toString());
+		}
+		return responseTimeout;
 	}
 
 }

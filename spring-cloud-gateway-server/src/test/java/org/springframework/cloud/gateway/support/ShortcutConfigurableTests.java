@@ -21,8 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,19 +29,74 @@ import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.gateway.support.ShortcutConfigurable.ShortcutType;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.expression.spel.SpelEvaluationException;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@RunWith(SpringRunner.class)
 @SpringBootTest
 public class ShortcutConfigurableTests {
 
 	@Autowired
 	BeanFactory beanFactory;
 
+	@Autowired
+	ConfigurableEnvironment env;
+
 	private SpelExpressionParser parser;
+
+	@Test
+	public void testNormalizeDefaultTypeWithSpelAndInvalidInputFails() {
+		parser = new SpelExpressionParser();
+		ShortcutConfigurable shortcutConfigurable = new ShortcutConfigurable() {
+			@Override
+			public List<String> shortcutFieldOrder() {
+				return Arrays.asList("bean", "arg1");
+			}
+		};
+		Map<String, String> args = new HashMap<>();
+		args.put("bean", "#{T(java.lang.Runtime).getRuntime().exec(\"touch /tmp/x\")}");
+		args.put("arg1", "val1");
+		assertThatThrownBy(() -> {
+			ShortcutType.DEFAULT.normalize(args, shortcutConfigurable, parser, this.beanFactory);
+		}).isInstanceOf(SpelEvaluationException.class);
+	}
+
+	@Test
+	public void testNormalizeDefaultTypeWithSpelAndInvalidPropertyReferenceFails() {
+		parser = new SpelExpressionParser();
+		ShortcutConfigurable shortcutConfigurable = new ShortcutConfigurable() {
+			@Override
+			public List<String> shortcutFieldOrder() {
+				return Arrays.asList("bean", "arg1");
+			}
+		};
+		Map<String, String> args = new HashMap<>();
+		args.put("barproperty", "#{@bar.getInt}");
+		args.put("arg1", "val1");
+		assertThatThrownBy(() -> {
+			ShortcutType.DEFAULT.normalize(args, shortcutConfigurable, parser, this.beanFactory);
+		}).isInstanceOf(SpelEvaluationException.class);
+	}
+
+	@Test
+	public void testNormalizeDefaultTypeWithSpelAndInvalidMethodReferenceFails() {
+		parser = new SpelExpressionParser();
+		ShortcutConfigurable shortcutConfigurable = new ShortcutConfigurable() {
+			@Override
+			public List<String> shortcutFieldOrder() {
+				return Arrays.asList("bean", "arg1");
+			}
+		};
+		Map<String, String> args = new HashMap<>();
+		args.put("barmethod", "#{@bar.myMethod}");
+		args.put("arg1", "val1");
+		assertThatThrownBy(() -> {
+			ShortcutType.DEFAULT.normalize(args, shortcutConfigurable, parser, this.beanFactory);
+		}).isInstanceOf(SpelEvaluationException.class);
+	}
 
 	@Test
 	public void testNormalizeDefaultTypeWithSpel() {
@@ -128,11 +182,54 @@ public class ShortcutConfigurableTests {
 		}
 	}
 
+	@Test
+	public void testNormalizeGatherListTailFlagFlagIsNull() {
+		parser = new SpelExpressionParser();
+		ShortcutConfigurable shortcutConfigurable = new ShortcutConfigurable() {
+			@Override
+			public List<String> shortcutFieldOrder() {
+				return Arrays.asList("values", "flag");
+			}
+
+			@Override
+			public ShortcutType shortcutType() {
+				return ShortcutType.GATHER_LIST_TAIL_FLAG;
+			}
+		};
+		Map<String, String> args = new HashMap<>();
+		args.put("1", "val0");
+		args.put("2", "val1");
+		args.put("3", "val2");
+		args.put("4", null);
+		Map<String, Object> map = ShortcutType.GATHER_LIST_TAIL_FLAG.normalize(args, shortcutConfigurable, parser,
+				this.beanFactory);
+		assertThat(map).isNotNull().containsKey("values");
+		assertThat((List) map.get("values")).containsExactly("val0", "val1", "val2");
+		assertThat(map.get("flag")).isNull();
+	}
+
 	@SpringBootConfiguration
 	protected static class TestConfig {
 
 		@Bean
 		public Integer foo() {
+			return 42;
+		}
+
+		@Bean
+		public Bar bar() {
+			return new Bar();
+		}
+
+	}
+
+	protected static class Bar {
+
+		public int getInt() {
+			return 42;
+		}
+
+		public int myMethod() {
 			return 42;
 		}
 
